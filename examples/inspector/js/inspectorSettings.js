@@ -33,7 +33,8 @@ var DEFAULT_SETTINGS = {
   release: true,
   logToConsole: false,
   mute: false,
-  kanvas: true,
+  turbo: true
+  mute: false,
   webgl: false
 };
 
@@ -68,6 +69,7 @@ function updateAVM2State() {
   disableRenderVisitor.value = state.render ? false : true;
   disableMouseVisitor.value = state.mouse ? false : true;
   showQuadTree.value = state.qtree ? true : false;
+  turboMode.value = state.turbo ? true : false;
   showRedrawRegions.value = state.redraw ? true : false;
   renderAsWireframe.value = state.wireframe ? true : false;
   traceCallExecution.value = state.traceCalls ? 1 : 0;

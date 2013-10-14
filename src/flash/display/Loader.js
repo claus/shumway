@@ -660,7 +660,7 @@ var LoaderDefinition = (function () {
           root = rootClass.createAsSymbol({
             framesLoaded: timeline.length,
             loader: loader,
-            parent: parent,
+            parent: parent || loader,
             index: parent ? 0 : -1,
             level: parent ? 0 : -1,
             timeline: timeline,
@@ -668,7 +668,8 @@ var LoaderDefinition = (function () {
             stage: loader._stage
           });
 
-          if (parent && parent == loader._stage) {
+          var isRootMovie = parent && parent == loader._stage && loader._stage._children.length === 0;
+          if (isRootMovie) {
             parent._frameRate = loaderInfo._frameRate;
             parent._stageHeight = loaderInfo._height;
             parent._stageWidth = loaderInfo._width;
@@ -828,7 +829,6 @@ var LoaderDefinition = (function () {
         loader._children.push(image);
         Bitmap.instanceConstructor.call(image, bitmapData);
         image._parent = loader;
-        loader._control.appendChild(image._control);
         loader._content = image;
         imgPromise.resolve(imageInfo);
         loader.contentLoaderInfo._dispatchEvent("init");
@@ -937,6 +937,8 @@ var LoaderDefinition = (function () {
         props.name = symbol.name;
         props.uniqueName = symbol.uniqueName;
         props.charset = symbol.charset;
+        props.bold = symbol.bold;
+        props.italic = symbol.italic;
         props.metrics = symbol.metrics;
         this._registerFont(className, props);
         break;

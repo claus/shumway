@@ -50,7 +50,7 @@ var BitmapDefinition = (function () {
       }
       ctx.save();
       if (this._pixelSnapping === 'auto' || this._pixelSnapping === 'always') {
-        var transform = ctx.currentTransform;
+        var transform = this._getConcatenatedTransform(true);
         var EPSILON = 0.001;
         if (Math.abs(Math.abs(transform.a) - 1) <= EPSILON &&
             Math.abs(Math.abs(transform.d) - 1) <= EPSILON &&
@@ -77,6 +77,13 @@ var BitmapDefinition = (function () {
           ctor : function(bitmapData, pixelSnapping, smoothing) {
             this._pixelSnapping = pixelSnapping;
             this._smoothing = smoothing;
+
+            if (!bitmapData && this.symbol) {
+              var symbol = this.symbol;
+              bitmapData = new flash.display.BitmapData(symbol.width,
+                                                        symbol.height);
+              bitmapData._ctx.drawImage(symbol.img, 0, 0);
+            }
 
             setBitmapData.call(this, bitmapData || null);
           },

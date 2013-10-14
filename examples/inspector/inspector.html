@@ -54,7 +54,7 @@ limitations under the License.
     </div>
 
     <div id="debugInfoContainer" class="active">
-      <canvas id="traceTerminal" width="600" height="800" tabindex='2'></canvas>
+      <canvas id="traceTerminal" width="600" height="210" tabindex='2'></canvas>
       <canvas id="frameTerminal" width="600" height="210" tabindex='3'></canvas>
       <div id="info" class="debugPanel" tabindex='4'></div>
       <div id="timerInfo" class="debugPanel" tabindex='5'></div>
@@ -81,7 +81,7 @@ limitations under the License.
       <div class="avm2Option toolbarButton" id="redraw">Redraw</div>
       <div class="avm2Option toolbarButton" id="wireframe">Wireframe</div>
       <div class="toolbarButton" id="sample">Sample</div>
-      <div class="avm2Option toolbarButton" id="kanvas">Kanvas</div>
+      <div class="avm2Option toolbarButton" id="turbo">Turbo</div>
       <div class="avm2Option toolbarButton" id="webgl">WebGL</div>
     </div>
 
@@ -102,7 +102,6 @@ limitations under the License.
       console.time("Load");
     </script>
     <script src="../../lib/DataView.js/DataView.js"></script>
-    <script src="../../lib/Kanvas/kanvas.js"></script>
 
     <script src="../../src/avm2/options.js"></script>
     <script src="../../src/avm2/util.js"></script>
@@ -340,8 +339,6 @@ limitations under the License.
     <script src="js/inspectorLoader.js"></script>
     <script src="js/inspectorLogging.js"></script>
     <script src="js/inspector.js"></script>
-
-
 
     <script>
         SHUMWAY_ROOT = "../../src/";

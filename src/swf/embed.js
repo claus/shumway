@@ -19,7 +19,7 @@
 
 SWF.embed = function(file, doc, container, options) {
   var canvas = doc.createElement('canvas');
-  var ctx = canvas.getContext(options.backend || 'kanvas-2d');
+  var ctx = canvas.getContext(options.backend || '2d');
   var loader = new flash.display.Loader();
   var loaderInfo = loader.contentLoaderInfo;
   var stage = new flash.display.Stage();
@@ -49,27 +49,6 @@ SWF.embed = function(file, doc, container, options) {
 
   loader._parent = stage;
   loader._stage = stage;
-
-  var cursorVisible = true;
-  function syncCursor() {
-    var newCursor;
-    if (!cursorVisible) {
-      newCursor = 'none';
-    } else if (stage._clickTarget._buttonMode &&
-               stage._clickTarget._useHandCursor) {
-      newCursor = 'pointer';
-    } else {
-      newCursor = 'auto';
-    }
-
-    container.style.cursor = newCursor;
-  }
-
-  stage._setCursorVisible = function(val) {
-    cursorVisible = val;
-    syncCursor();
-  };
-  stage._syncCursor = syncCursor;
 
   function fitCanvas(container, canvas) {
     if (canvasHolder) {
@@ -125,12 +104,9 @@ SWF.embed = function(file, doc, container, options) {
         } while ((node = node.offsetParent));
       }
 
-      var canvasState = stage._canvasState;
-
-      var mouseX = ((domEvt.pageX - left) * pixelRatio - canvasState.offsetX) /
-        canvasState.scaleX;
-      var mouseY = ((domEvt.pageY - top) * pixelRatio - canvasState.offsetY) /
-        canvasState.scaleY;
+      var m = stage._currentTransform;
+      var mouseX = ((domEvt.pageX - left) * pixelRatio - m.tx) / m.a;
+      var mouseY = ((domEvt.pageY - top) * pixelRatio - m.ty) / m.d;
 
       if (mouseX !== stage._mouseX || mouseY !== stage._mouseY) {
         stage._mouseMoved = true;
@@ -181,8 +157,6 @@ SWF.embed = function(file, doc, container, options) {
 
     root._dispatchEvent("added");
     root._dispatchEvent("addedToStage");
-
-    syncCursor();
 
     container.appendChild(canvasHolder || canvas);
 
