@@ -25,6 +25,7 @@ var disableMouseVisitor = rendererOptions.register(new Option("dmv", "disableMou
 var showRedrawRegions = rendererOptions.register(new Option("rr", "showRedrawRegions", "boolean", false, "show redraw regions"));
 var renderAsWireframe = rendererOptions.register(new Option("raw", "renderAsWireframe", "boolean", false, "render as wireframe"));
 var showQuadTree = rendererOptions.register(new Option("qt", "showQuadTree", "boolean", false, "show quad tree"));
+var framesPerTick = rendererOptions.register(new Option("", "framesPerTick", "number", 1, "number of frames to draw every tick"));
 var turboMode = rendererOptions.register(new Option("", "turbo", "boolean", false, "turbo mode"));
 
 if (typeof FirefoxCom !== 'undefined') {
