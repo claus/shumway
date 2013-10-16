@@ -392,10 +392,18 @@
       }
       var loop = null;
       var loops = [];
+      function addLoop(l) {
+        var llen = l.length;
+        if (llen > 3 && l[0] === l[llen - 2] && l[1] === l[llen - 1]) {
+          l.pop();
+          l.pop();
+        }
+        loops.push(l);
+      }
       path.visit({
         moveTo: function (x, y) {
           if (loop) {
-            loops.push(loop);
+            addLoop(loop);
           }
           loop = [x, y];
         },
@@ -409,7 +417,7 @@
         }
       });
       if (loop) {
-        loops.push(loop);
+        addLoop(loop);
       }
       if (loops.length === 0) {
         return;
