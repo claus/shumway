@@ -731,30 +731,30 @@ function renderStage(stage, ctx, events) {
           // Initial display list is already constructed, skip frame construction phase.
           firstRun = false;
         } else {
-          timelineEnter("advanceFrame");
+          //timelineEnter("advanceFrame");
           domain.broadcastMessage("advanceFrame");
-          timelineLeave("advanceFrame");
+          //timelineLeave("advanceFrame");
 
-          timelineEnter("enterFrame");
+          //timelineEnter("enterFrame");
           domain.broadcastMessage("enterFrame");
-          timelineLeave("enterFrame");
+          //timelineLeave("enterFrame");
 
-          timelineEnter("constructChildren");
+          //timelineEnter("constructChildren");
           domain.broadcastMessage("constructChildren");
-          timelineLeave("constructChildren");
+          //timelineLeave("constructChildren");
         }
 
-        timelineEnter("frameConstructed");
+        //timelineEnter("frameConstructed");
         domain.broadcastMessage("frameConstructed");
-        timelineLeave("frameConstructed");
+        //timelineLeave("frameConstructed");
 
-        timelineEnter("executeFrame");
+        //timelineEnter("executeFrame");
         domain.broadcastMessage("executeFrame");
-        timelineLeave("executeFrame");
+        //timelineLeave("executeFrame");
 
-        timelineEnter("exitFrame");
+        //timelineEnter("exitFrame");
         domain.broadcastMessage("exitFrame");
-        timelineLeave("exitFrame");
+        //timelineLeave("exitFrame");
       }
 
       if (stage._deferRenderEvent) {

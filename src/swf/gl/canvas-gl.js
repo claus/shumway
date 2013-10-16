@@ -5,7 +5,7 @@ var CanvasWebGLContext = CanvasWebGLContext || (function (document, undefined) {
   var TRACE_OFF = 0;
   var TRACE_BRIEF = 1;
   var TRACE_VERBOSE = 2;
-  
+
   var traceOption = webGLOptions.register(new Option("", "trace", "number", TRACE_BRIEF, "trace commands", {off: TRACE_OFF, brief: TRACE_BRIEF, verbose: TRACE_VERBOSE}));
   var alphaOption = webGLOptions.register(new Option("", "alpha", "boolean", false, "makes all colors transparent"));
   var stencilOption = webGLOptions.register(new Option("", "stencilOption", "boolean", false, "cache tessellations"));
