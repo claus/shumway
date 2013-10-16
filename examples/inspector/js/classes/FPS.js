@@ -146,7 +146,6 @@ var FPS = (function () {
     var gap = 1;
     var maxFrames = (this.cw / (w + gap)) | 0;
     var frames = this.gatherFrames(maxFrames);
-    var frameRateLineH = 1000 / this.frameRate;
     //var t1 = performance.now() - t;
 
     var context = this.context;
@@ -174,9 +173,8 @@ var FPS = (function () {
         avgFrameRateCount++;
       }
       offsetW = i * (w + gap);
-      var delayH = frames[i + 1].startTime - frame.endTime;
-      context.fillStyle = delayH > frameRateLineH ? barOverColor : barColor;
-      context.fillRect(offsetW, 0, w, delayH);
+      context.fillStyle = barColor;
+      context.fillRect(offsetW, 0, w, frames[i + 1].startTime - frame.startTime);
       drawNode(frame);
     }
 
@@ -200,10 +198,11 @@ var FPS = (function () {
     /**
      * Draw FPS line
      */
+    var lineH = 1000 / this.frameRate;
     context.beginPath();
     context.lineWidth = 1;
-    context.moveTo(0, frameRateLineH);
-    context.lineTo(this.cw, frameRateLineH);
+    context.moveTo(0, lineH);
+    context.lineTo(this.cw, lineH);
     context.strokeStyle = fpsLineColor;
     context.stroke();
 
