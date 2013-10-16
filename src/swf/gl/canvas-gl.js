@@ -76,7 +76,6 @@ var CanvasWebGLContext = CanvasWebGLContext || (function (document, undefined) {
       this._path = new GL.Path();
       this._pathTransform = Transform.createIdentity();
       this._pathTransformStack = [];
-      this._pathOriginalTransform = Transform.createIdentity();
 
       this.resetTransform();
     }
@@ -418,7 +417,6 @@ var CanvasWebGLContext = CanvasWebGLContext || (function (document, undefined) {
       traceOption.value >= TRACE_VERBOSE && writer.writeLn("beginPath " + toSafeArrayString(arguments));
       this._path.reset();
       this._pathTransform.reset();
-      this._pathOriginalTransform = this._state.transform.clone();
     };
 
     canvasWebGLContext.prototype.closePath = function closePath() {
@@ -509,7 +507,7 @@ var CanvasWebGLContext = CanvasWebGLContext || (function (document, undefined) {
         geometry.addFill(simplePath, color);
         cache[hash] = geometry;
       }
-      this._scheduleJob(new GL.Job.Draw(this, geometry, GL.createMatrixFromTransform(this._pathOriginalTransform), 1, mode));
+      this._scheduleJob(new GL.Job.Draw(this, geometry, GL.createMatrixFromTransform(this._state.transform), 1, mode));
     };
 
     canvasWebGLContext.prototype.stroke = function stroke() {
@@ -542,7 +540,7 @@ var CanvasWebGLContext = CanvasWebGLContext || (function (document, undefined) {
         geometry.addFill(path, color);
         cache[hash] = geometry;
       }
-      this._scheduleJob(new GL.Job.Draw(this, geometry, GL.createMatrixFromTransform(this._pathOriginalTransform), 1));
+      this._scheduleJob(new GL.Job.Draw(this, geometry, GL.createMatrixFromTransform(this._state.transform), 1));
     };
 
     canvasWebGLContext.prototype.fillText = function fillText(text, x, y, maxWidth) {
