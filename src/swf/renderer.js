@@ -720,6 +720,7 @@ function renderStage(stage, ctx, events) {
       var domain = avm2.systemDomain;
 
       if (renderFrame) {
+        timelineEnter("EVENTS");
         frameTime = now;
         maxDelay = 1000 / stage._frameRate;
         if (!turboMode.value) {
@@ -755,6 +756,7 @@ function renderStage(stage, ctx, events) {
         //timelineEnter("exitFrame");
         domain.broadcastMessage("exitFrame");
         //timelineLeave("exitFrame");
+        timelineLeave("EVENTS");
       }
 
       if (stage._deferRenderEvent) {
@@ -768,9 +770,9 @@ function renderStage(stage, ctx, events) {
 
         if (!disablePreVisitor.value) {
           traceRenderer.value && frameWriter.enter("> Pre Visitor");
-          fps && fps.enter("PRE");
+          timelineEnter("PRE");
           invalidPath = stage._processInvalidRegions(true);
-          fps && fps.leave("PRE");
+          timelineLeave("PRE");
           traceRenderer.value && frameWriter.leave("< Pre Visitor");
         } else {
           stage._processInvalidRegions(false);
