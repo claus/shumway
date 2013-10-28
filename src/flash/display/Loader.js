@@ -44,7 +44,7 @@
           SWF_TAG_CODE_SET_BACKGROUND_COLOR, SWF_TAG_CODE_SHOW_FRAME,
           SWF_TAG_CODE_SOUND_STREAM_BLOCK, SWF_TAG_CODE_SOUND_STREAM_HEAD,
           SWF_TAG_CODE_START_SOUND, SWF_TAG_CODE_SYMBOL_CLASS,
-          SWF_TAG_CODE_DEFINE_BINARY_DATA */
+          SWF_TAG_CODE_DEFINE_BINARY_DATA, SWF_TAG_CODE_EXPORT_ASSETS */
 // Ignoring "The Function constructor is a form of eval."
 /*jshint -W054 */
 // TODO: Investigate "Don't make functions within a loop."
@@ -65,7 +65,6 @@ var LoaderDefinition = (function () {
       '../../../lib/DataView.js/DataView.js',
       '../util.js',
       '../../swf/config.js',
-      '../../swf/util.js',
       '../../swf/swf.js',
       '../../swf/types.js',
       '../../swf/structs.js',
@@ -96,12 +95,12 @@ var LoaderDefinition = (function () {
 
     var commitData;
     if (loader) {
-      commitData = function (data) {
+      commitData = function (data, transferables) {
         return loader._commitData(data);
       };
     } else {
-      commitData = function (data) {
-        self.postMessage(data);
+      commitData = function (data, transferables) {
+        self.postMessage(data, transferables);
       };
     }
 
@@ -118,7 +117,7 @@ var LoaderDefinition = (function () {
         break;
       case SWF_TAG_CODE_DEFINE_BITS_LOSSLESS:
       case SWF_TAG_CODE_DEFINE_BITS_LOSSLESS2:
-        symbol = defineBitmap(swfTag, symbols);
+        symbol = defineBitmap(swfTag);
         break;
       case SWF_TAG_CODE_DEFINE_BUTTON:
       case SWF_TAG_CODE_DEFINE_BUTTON2:
@@ -148,6 +147,7 @@ var LoaderDefinition = (function () {
         symbol = {
           type: 'binary',
           id: swfTag.id,
+          // TODO: make transferable
           data: swfTag.data
         };
         break;
@@ -175,6 +175,7 @@ var LoaderDefinition = (function () {
             break;
           case SWF_TAG_CODE_SOUND_STREAM_HEAD:
             try {
+              // TODO: make transferable
               soundStream = createSoundStream(tag);
               frame.soundStream = soundStream.info;
             } catch (e) {
@@ -241,7 +242,7 @@ var LoaderDefinition = (function () {
 
       symbol.isSymbol = true;
       symbols[swfTag.id] = symbol;
-      commitData(symbol);
+      commitData(symbol, symbol.transferables);
     }
     function createParsingContext() {
       var depths = { };
@@ -314,6 +315,7 @@ var LoaderDefinition = (function () {
               break;
             case SWF_TAG_CODE_SOUND_STREAM_HEAD:
               try {
+                // TODO: make transferable
                 soundStream = createSoundStream(tag);
                 frame.soundStream = soundStream.info;
               } catch (e) {
@@ -326,12 +328,19 @@ var LoaderDefinition = (function () {
                 frame.soundStreamBlock = soundStream.decode(tag.data);
               }
               break;
-            case SWF_TAG_CODE_SYMBOL_CLASS:
+            case SWF_TAG_CODE_EXPORT_ASSETS:
               var exports = frame.exports;
               if (exports)
                 frame.exports = exports.concat(tag.exports);
               else
                 frame.exports = tag.exports.slice(0);
+              break;
+            case SWF_TAG_CODE_SYMBOL_CLASS:
+              var symbolClasses = frame.symbolClasses;
+              if (symbolClasses)
+                frame.symbolClasses = symbolClasses.concat(tag.exports);
+              else
+                frame.symbolClasses = tag.exports.slice(0);
               break;
             case SWF_TAG_CODE_FRAME_LABEL:
               frame.labelName = tag.name;
@@ -616,6 +625,7 @@ var LoaderDefinition = (function () {
       var actionBlocks = frame.actionBlocks;
       var initActionBlocks = frame.initActionBlocks;
       var exports = frame.exports;
+      var symbolClasses = frame.symbolClasses;
       var sceneData = frame.sceneData;
       var loader = this;
       var dictionary = loader._dictionary;
@@ -650,7 +660,27 @@ var LoaderDefinition = (function () {
           }
         }
 
-        if (exports && loader._isAvm2Enabled) {
+        if (symbolClasses && loader._isAvm2Enabled) {
+          var symbolClassesPromises = [];
+          for (var i = 0, n = symbolClasses.length; i < n; i++) {
+            var asset = symbolClasses[i];
+            var symbolPromise = dictionary[asset.symbolId];
+            if (!symbolPromise)
+              continue;
+            symbolPromise.then(
+              (function(symbolPromise, className) {
+                return function symbolPromiseResolved() {
+                  var symbolInfo = symbolPromise.value;
+                  symbolInfo.className = className;
+                  avm2.applicationDomain.getClass(className).setSymbol(symbolInfo.props);
+                };
+              })(symbolPromise, asset.className)
+            );
+            symbolClassesPromises.push(symbolPromise);
+          }
+          return Promise.when.apply(Promise, symbolClassesPromises);
+        }
+        if (exports && !loader._isAvm2Enabled) {
           var exportPromises = [];
           for (var i = 0, n = exports.length; i < n; i++) {
             var asset = exports[i];
@@ -661,8 +691,7 @@ var LoaderDefinition = (function () {
               (function(symbolPromise, className) {
                 return function symbolPromiseResolved() {
                   var symbolInfo = symbolPromise.value;
-                  symbolInfo.className = className;
-                  avm2.applicationDomain.getClass(className).setSymbol(symbolInfo.props);
+                  loader._avm1Context.addAsset(className, symbolInfo.props);
                 };
               })(symbolPromise, asset.className)
             );
@@ -810,7 +839,7 @@ var LoaderDefinition = (function () {
               root.addFrameScript(frameNum - 1, function(actionsData, spriteId, state) {
                 if (state.executed) return;
                 state.executed = true;
-                return executeActions(actionsData, avm1Context, this._getAS2Object(), exports);
+                return executeActions(actionsData, avm1Context, this._getAS2Object());
               }.bind(root, actionsData, spriteId, {executed: false}));
             }
           }
@@ -820,7 +849,7 @@ var LoaderDefinition = (function () {
               var block = actionBlocks[i];
               root.addFrameScript(frameNum - 1, (function(block) {
                 return function () {
-                  return executeActions(block, avm1Context, this._getAS2Object(), exports);
+                  return executeActions(block, avm1Context, this._getAS2Object());
                 };
               })(block));
             }
@@ -1151,6 +1180,9 @@ var LoaderDefinition = (function () {
     _load: function (request, checkPolicyFile, applicationDomain,
                      securityDomain, deblockingFilter)
     {
+      if (!isWorker && flash.net.URLRequest.class.isInstanceOf(request)) {
+        this._contentLoaderInfo._url = request._url;
+      }
       if (!isWorker && WORKERS_ENABLED) {
         var loader = this;
         var worker = loader._worker = new Worker(SHUMWAY_ROOT + LOADER_PATH);
@@ -1237,10 +1269,10 @@ var LoaderDefinition = (function () {
         },
         _load: def._load,
         _loadBytes: function _loadBytes(bytes, checkPolicyFile, applicationDomain, securityDomain, requestedContentParent, parameters, deblockingFilter, allowLoadBytesCodeExecution, imageDecodingPolicy) { // (bytes:ByteArray, checkPolicyFile:Boolean, applicationDomain:ApplicationDomain, securityDomain:SecurityDomain, requestedContentParent:DisplayObjectContainer, parameters:Object, deblockingFilter:Number, allowLoadBytesCodeExecution:Boolean, imageDecodingPolicy:String) -> void
-          def._load(bytes.a);
+          def._load.call(this, bytes.a, checkPolicyFile, applicationDomain, securityDomain);
         },
         _unload: function _unload(halt, gc) { // (halt:Boolean, gc:Boolean) -> void
-          notImplemented("Loader._unload");
+          somewhatImplemented("Loader._unload, do we even need to do anything here?");
         },
         _close: function _close() { // (void) -> void
           somewhatImplemented("Loader._close");

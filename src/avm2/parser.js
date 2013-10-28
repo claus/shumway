@@ -776,6 +776,14 @@ var Multiname = (function () {
     return qualifyNameInternal(namespace.qualifiedName, name)
   };
 
+  multiname.stripPublicQualifier = function stripPublicQualifier(qn) {
+    var index = qn.indexOf(PUBLIC_QUALIFIED_NAME_PREFIX);
+    if (index !== 0) {
+      return undefined;
+    }
+    return qn.substring(PUBLIC_QUALIFIED_NAME_PREFIX.length);
+  };
+
   /**
    * Creates a Multiname from a mangled qualified name. The format should be of
    * the form kindName$mangledURI$name.
@@ -1422,7 +1430,7 @@ var ScriptInfo = (function scriptInfo() {
 
 var AbcFile = (function () {
   function abcFile(bytes, name) {
-    console.time("Parse ABC: " + name);
+    var parseStart = performance.now();
     this.name = name;
 
     var n, i;
@@ -1470,7 +1478,7 @@ var AbcFile = (function () {
       MethodInfo.parseBody(this, stream);
     }
 
-    console.timeEnd("Parse ABC: " + name);
+    console.info("Parse ABC: " + name + ":" + (performance.now() - parseStart));
   }
 
   function checkMagic(stream) {

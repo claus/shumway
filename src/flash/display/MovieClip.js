@@ -75,6 +75,7 @@ var MovieClipDefinition = (function () {
         if (self._playHead !== self._currentFrame) {
           self._gotoFrame(self._playHead, true);
         }
+        self._postConstructChildren();
       };
       this._addEventListener('executeFrame', this._onExecuteFrame);
 
@@ -210,6 +211,8 @@ var MovieClipDefinition = (function () {
             currentChild.blendMode = this._resolveBlendMode(nextCmd.blendMode);
           }
 
+          currentDisplayListItem.cmd = nextCmd;
+
           continue;
         }
 
@@ -303,6 +306,8 @@ var MovieClipDefinition = (function () {
         if (enterFrame && (execute || !this._loader._isAvm2Enabled)) {
           this._callFrame(frameNum);
         }
+
+        this._postConstructChildren();
 
         return;
       }

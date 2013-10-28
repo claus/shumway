@@ -15,7 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/*global avm1lib, rgbaObjToStr, rgbIntAlphaToStr, warning, FontDefinition */
+/*global avm1lib, rgbaObjToStr, rgbIntAlphaToStr, warning, FontDefinition,
+  Errors, throwError */
 
 var TextFieldDefinition = (function () {
 
@@ -23,6 +24,16 @@ var TextFieldDefinition = (function () {
 
   // Used for measuring text runs, not for rendering
   var measureCtx = document.createElement('canvas').getContext('2d');
+
+  function TextLine(y) {
+    this.x = 0;
+    this.width = 0;
+    this.y = y;
+    this.height = 0;
+    this.leading = 0;
+    this.runs = [];
+    this.largestFormat = null;
+  }
 
   /*
    * Parsing, in this context, actually means using the browser's html parser
@@ -233,10 +244,10 @@ var TextFieldDefinition = (function () {
     }
     while (text.length) {
       var width = state.ctx.measureText(text).width;
-      var availableWidth = state.w - state.x;
+      var availableWidth = state.w - state.line.width;
       if (availableWidth <= 0) {
         finishLine(state);
-        availableWidth = state.w - state.x;
+        availableWidth = state.w - state.line.width;
       }
       assert(availableWidth > 0);
       if (width <= availableWidth) {
@@ -262,7 +273,7 @@ var TextFieldDefinition = (function () {
           wrapOffset--;
         }
         if (wrapOffset === -1) {
-          if (state.x > 0) {
+          if (state.line.width > 0) {
             finishLine(state);
             continue;
           }
@@ -290,30 +301,39 @@ var TextFieldDefinition = (function () {
     }
   }
   function addTextRun(state, text, width) {
+    if (text.length === 0) {
+      return;
+    }
     // `y` is set by `finishLine`
-    var size = state.currentFormat.size;
-    var run = {type: 't', text: text, x: state.x, y: 0, size: size};
+    var line = state.line;
+    var format = state.currentFormat;
+    var size = format.size;
+    var run = {type: 't', text: text, x: line.width};
     state.runs.push(run);
-    state.line.push(run);
-    state.x += width;
-    if (size > state.lineHeight) {
-      state.lineHeight = size;
-      state.metrics = state.currentFormat.font._metrics;
+    state.line.runs.push(run);
+    line.width += width|0;
+    // TODO: Implement Flash's absurd behavior for leading
+    // Specifically, leading is only used if it is set by a <div> tag, or by
+    // a <textformat> tag that is the first node in a new line. Whether that
+    // line is caused by a <div> tag, <br> or \n is immaterial. I didn't check
+    // what happens with word wrapping or setTextFormat, but you should.
+    if (line.leading === 0 && format.leading > line.leading) {
+      line.leading = format.leading;
+    }
+    if (!line.largestFormat || size > line.largestFormat.size) {
+      line.largestFormat = format;
     }
   }
   function finishLine(state) {
-    var size = state.lineHeight;
-    if (size === 0) {
+    var line = state.line;
+    if (line.runs.length === 0) {
       return;
     }
-    var metrics = state.metrics;
-    state.y += metrics.ascent * size|0;
-    var y = state.y;
-    var runs = state.line;
-    var run, i;
-    for (i = runs.length; i--;) {
-      run = runs[i];
-      run.y = y;
+    var runs = line.runs;
+    var format = line.largestFormat;
+    var baselinePos = line.y + format.font._metrics.ascent * format.size;
+    for (var i = runs.length; i--;) {
+      runs[i].y = baselinePos;
     }
     var align = (state.currentFormat.align || '').toLowerCase();
     if (state.combinedAlign === null) {
@@ -323,7 +343,7 @@ var TextFieldDefinition = (function () {
     }
     // TODO: maybe support justified text somehow
     if (align === 'center' || align === 'right') {
-      var offset = Math.max(state.w - state.x, 0);
+      var offset = Math.max(state.w - line.width, 0);
       if (align === 'center') {
         offset >>= 1;
       }
@@ -331,17 +351,10 @@ var TextFieldDefinition = (function () {
         runs[i].x += offset;
       }
     }
-    state.lines.push(runs);
-    state.line = [];
-    state.maxLineWidth = Math.max(state.maxLineWidth, state.x);
-    state.x = 0;
-    if (y <= state.h) {
-      state.visibleLines++;
-    }
-    state.y += (metrics.descent + metrics.leading) * size +
-               state.currentFormat.leading|0;
-    state.lineHeight = 0;
-    state.metrics = null;
+    line.height = format.font._metrics.height * format.size + line.leading|0;
+    state.maxLineWidth = Math.max(state.maxLineWidth, line.width);
+    state.lines.push(line);
+    state.line = new TextLine(line.y + line.height);
   }
   function pushFormat(state, node) {
     var attributes = node.format;
@@ -380,14 +393,17 @@ var TextFieldDefinition = (function () {
           // TODO: properly parse this in extractAttributes
           format.kerning = attributes.KERNING && true;
         }
-        if (attributes.LEADING !== undefined) {
-          format.leading = parseFloat(attributes.LEADING);
-        }
       /* falls through */
       case 'TEXTFORMAT':
         // `textFormat` has, among others, the same attributes as `font`
+        if (attributes.LEADING !== undefined) {
+          format.leading = parseFloat(attributes.LEADING);
+        }
         if (attributes.INDENT !== undefined) {
-          state.x += attributes.INDENT;
+          // TODO: figure out if indents accumulate and how they apply to text
+          // already in the line
+          state.line.x = attributes.INDENT;
+          state.line.width += attributes.INDENT|0;
         }
         // TODO: support leftMargin, rightMargin & blockIndent
         // TODO: support tabStops
@@ -468,7 +484,7 @@ var TextFieldDefinition = (function () {
       this._scrollV = 1;
       this._maxScrollV = 1;
       this._bottomScrollV = 1;
-      this._numLines = 1;
+      this._lines = [];
       this._embedFonts = false;
       this._autoSize = 'none';
       this._wordWrap = false;
@@ -488,6 +504,7 @@ var TextFieldDefinition = (function () {
       if (!s) {
         this._currentTransform.tx -= 40;
         this._currentTransform.ty -= 40;
+        resolveFont(initialFormat, false);
         this.text = '';
         return;
       }
@@ -565,8 +582,8 @@ var TextFieldDefinition = (function () {
       if (width <= 0 || height <= 0) {
         return;
       }
-      ctx.save();
 
+      ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, width + 1, height + 1);
       ctx.clip();
@@ -582,21 +599,31 @@ var TextFieldDefinition = (function () {
       }
       ctx.closePath();
 
+      if (this._lines.length === 0) {
+        ctx.restore();
+        return;
+      }
+
       ctx.translate(2, 2);
       ctx.save();
       colorTransform.setAlpha(ctx);
       var runs = this._content.textruns;
+      var offsetY = this._lines[this._scrollV - 1].y;
       for (var i = 0; i < runs.length; i++) {
         var run = runs[i];
         if (run.type === 'f') {
           ctx.restore();
           ctx.font = run.format.str;
+          // TODO: only apply color and alpha if it actually changed
           colorTransform.setFillStyle(ctx, run.format.color);
           ctx.save();
           colorTransform.setAlpha(ctx);
         } else {
           assert(run.type === 't', 'Invalid run type: ' + run.type);
-          ctx.fillText(run.text, run.x - this._drawingOffsetH, run.y);
+          if (run.y < offsetY) {
+            continue;
+          }
+          ctx.fillText(run.text, run.x - this._drawingOffsetH, run.y - offsetY);
         }
       }
       ctx.restore();
@@ -620,22 +647,37 @@ var TextFieldDefinition = (function () {
       }
       var bounds = this._bbox;
       var initialFormat = this._defaultTextFormat;
+      resolveFont(initialFormat, this._embedFonts);
       var firstRun = {type: 'f', format: initialFormat};
       var width = Math.max(bounds.xMax / 20 - 4, 1);
       var height = Math.max(bounds.yMax / 20 - 4, 1);
-      var state = {ctx: measureCtx, y: 0, x: 0, w: width, h: height,
-                   lineHeight: 0, maxLineWidth: 0,
+      var state = {ctx: measureCtx, w: width, h: height, maxLineWidth: 0,
                    formats: [initialFormat], currentFormat: initialFormat,
-                   line: [], lines: [], runs: [firstRun],
+                   line: new TextLine(0), lines: [], runs: [firstRun],
                    wordWrap: this._wordWrap, combinedAlign: null,
                    textColor: this._textColor, embedFonts: this._embedFonts};
       collectRuns(this._content.tree, state);
       this._textWidth = state.maxLineWidth|0;
-      this._textHeight = state.y|0;
-      this._numLines = state.lines.length;
+      this._textHeight = state.line.y|0;
+      this._lines = state.lines;
       this._content.textruns = state.runs;
+      this._scrollV = 1;
+      this._maxScrollV = 1;
+      this._bottomScrollV = 1;
       var autoSize = this._autoSize;
-      if (autoSize !== 'none') {
+      if (autoSize === 'none') {
+        var maxVisibleY = (bounds.yMax - 80) / 20;
+        if (this._textHeight > maxVisibleY) {
+          for (var i = 0; i < state.lines.length; i++) {
+            var line = state.lines[i];
+            if (line.y + line.height > maxVisibleY) {
+              this._maxScrollV = i + 1;
+              this._bottomScrollV = i === 0 ? 1 : i;
+              break;
+            }
+          }
+        }
+      } else {
         var targetWidth = this._textWidth;
         var align = state.combinedAlign;
         var diffX = 0;
@@ -678,6 +720,7 @@ var TextFieldDefinition = (function () {
       return this._content.text;
     },
     set text(val) {
+      val = String(val);
       if (this._content && this._content.text === val) {
         return;
       }
@@ -709,7 +752,6 @@ var TextFieldDefinition = (function () {
     },
     set defaultTextFormat(val) {
       this._defaultTextFormat = val.toObject();
-      this._defaultTextFormat.face = val._font;
       this.invalidateDimensions();
     },
 
@@ -718,6 +760,12 @@ var TextFieldDefinition = (function () {
     },
     setTextFormat: function (format, beginIndex /*:int = -1*/, endIndex /*:int = -1*/) {
       this.defaultTextFormat = format;// TODO
+      if (this._content && this._content.text === this._content.htmlText) {
+        // HACK replacing format for non-html text
+        var text = this.text;
+        this._content = null;
+        this.text = text;
+      }
       this.invalidateDimensions();
     },
 
@@ -844,25 +892,65 @@ var TextFieldDefinition = (function () {
             return this._textWidth;
           }
         },
+        length: {
+          get: function length() { // (void) -> uint
+            return this._content.text.length;
+          }
+        },
+        numLines: {
+          get: function numLines() { // (void) -> uint
+            this.ensureDimensions();
+            return this._lines.length;
+          }
+        },
+        getLineMetrics: function (lineIndex) { // (lineIndex:int) -> TextLineMetrics
+          this.ensureDimensions();
+          if (lineIndex < 0 || lineIndex >= this._lines.length) {
+            throwError('RangeError', Errors.ParamRangeError);
+          }
+          var line = this._lines[lineIndex];
+          var format = line.largestFormat;
+          var metrics = format.font._metrics;
+          var size = format.size;
+          // Rounding for metrics seems to be screwy. A descent of 3.5 gets
+          // rounded to 3, but an ascent of 12.8338 gets rounded to 13.
+          // For now, round up for things slightly above .5.
+          var ascent = metrics.ascent * size + 0.49999 | 0;
+          var descent = metrics.descent * size + 0.49999 | 0;
+          var leading = metrics.leading * size + 0.49999 + line.leading | 0;
+          // TODO: check if metrics values can be floats for embedded fonts
+          return new flash.text.TextLineMetrics(line.x + 2, line.width,
+                                                line.height,
+                                                ascent, descent, leading);
+        },
         scrollV: {
           get: function scrollV() {
-            somewhatImplemented('TextField#scrollV');
             return this._scrollV;
           },
           set: function scrollV(value) {
-            somewhatImplemented('TextField#scrollV');
+            this.ensureDimensions();
+            value = Math.max(1, Math.min(this._maxScrollV, value));
             this._scrollV = value;
           }
         },
         bottomScrollV: {
-          get: function scrollV() {
-            somewhatImplemented('TextField#scrollV');
-            return this._bottomScrollV;
+          get: function bottomScrollV() {
+            this.ensureDimensions();
+            if (this._scrollV === 1) {
+              return this._bottomScrollV;
+            }
+            var maxVisibleY = (this._bbox.yMax - 80) / 20;
+            var offsetY = this._lines[this._scrollV - 1].y;
+            for (var i = this._bottomScrollV; i < this._lines.length; i++) {
+              var line = this._lines[i];
+              if (line.y + line.height + offsetY > maxVisibleY) {
+                return i + 1;
+              }
+            }
           }
         },
         maxScrollV: {
           get: function maxScrollV() { // (void) -> Number
-            somewhatImplemented('TextField#maxScrollV');
             this.ensureDimensions();
             return this._maxScrollV;
           }
@@ -942,7 +1030,7 @@ var TextFieldDefinition = (function () {
             return this._embedFonts;
           },
           set: function embedFonts(value) { // (value:Boolean) -> void
-            somewhatImplemented("TextField.embedFonts");
+            this.invalidateDimensions();
             this._embedFonts = value;
           }
         },
@@ -955,17 +1043,6 @@ var TextFieldDefinition = (function () {
             this._condenseWhite = value;
           }
         },
-        numLines: {
-          get: function numLines() { // (void) -> uint
-            this.ensureDimensions();
-            return this._numLines;
-          }
-        },
-        length: {
-          get: function length() { // (void) -> uint
-            return this._content.text.length;
-          }
-        },
         sharpness: {
           get: function sharpness() { // (void) -> Number
             return this._sharpness;
@@ -974,10 +1051,6 @@ var TextFieldDefinition = (function () {
             somewhatImplemented("TextField.sharpness");
             this._sharpness = value;
           }
-        },
-        getLineMetrics: function (lineIndex) { // (lineIndex:int) -> TextLineMetrics
-          somewhatImplemented("TextField.getLineMetrics, ");
-          return new flash.text.TextLineMetrics(0, 8, 8);
         }
       }
     }

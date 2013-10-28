@@ -75,22 +75,25 @@ function visitContainer(container, visitor, context) {
     }
 
     if (visitor.ignoreVisibleAttribute || (child._visible && !child._maskedObject)) {
-      var isContainer = flash.display.DisplayObjectContainer.class.isInstanceOf(child) ||
-                        flash.display.SimpleButton.class.isInstanceOf(child);
-
-      visitor.visit(child, isContainer, visitContainer, context);
+      visitor.visit(child, visitContainer, context);
     }
   }
 
   visitor.childrenEnd(container);
 }
 
-function getBlendModeName(blendMode) {
-  var blendModeClass = flash.display.BlendMode.class;
-  if (blendMode === blendModeClass.NORMAL) {
-    return 'normal';
-  }
+var BlendModeNameMap = {
+  "normal": 'normal',
+  "multiply": 'multiply',
+  "screen": 'screen',
+  "lighten": 'lighten',
+  "darken": 'darken',
+  "difference": 'difference',
+  "overlay": 'overlay',
+  "hardlight": 'hard-light'
+};
 
+function getBlendModeName(blendMode) {
   // TODO:
 
   // These Flash blend modes have no canvas equivalent:
@@ -106,16 +109,7 @@ function getBlendModeName(blendMode) {
   // - blendModeClass.ERASE (destination-out)
   // - blendModeClass.LAYER [defines backdrop]
 
-  switch (blendMode) {
-    case blendModeClass.MULTIPLY:   return  "multiply";
-    case blendModeClass.SCREEN:     return  "screen";
-    case blendModeClass.LIGHTEN:    return  "lighten";
-    case blendModeClass.DARKEN:     return  "darken";
-    case blendModeClass.DIFFERENCE: return  "difference";
-    case blendModeClass.OVERLAY:    return  "overlay";
-    case blendModeClass.HARDLIGHT:  return  "hard-light";
-  }
-  return "normal";
+  return BlendModeNameMap[blendMode] || 'normal';
 }
 
 function RenderVisitor(root, ctx, invalidPath, refreshStage) {
@@ -134,26 +128,43 @@ RenderVisitor.prototype = {
     visitContainer(this.root, this,
                    new RenderingContext(this.refreshStage, this.invalidPath));
   },
-  startFragment: function() {
-    var isContainer = flash.display.DisplayObjectContainer.class.isInstanceOf(this.root) ||
-                      flash.display.SimpleButton.class.isInstanceOf(this.root);
-
+  startFragment: function(matrix) {
+    var root = this.root;
+    // HACK: temporarily set the root DisplayObject's currentTransform
+    //       to the matrix passed in via BitmapData.draw(), to make masks
+    //       work properly which rely on _getConcatenatedTransform to set
+    //       the initial transformation on the temporary canvases.
+    var currentTransform = root._currentTransform;
+    var t = currentTransform;
+    if (matrix) {
+      t = root._currentTransform = {
+        a: matrix.a,
+        b: matrix.b,
+        c: matrix.c,
+        d: matrix.d,
+        tx: matrix.tx * 20,
+        ty: matrix.ty * 20
+      };
+      root._invalidateTransform();
+    }
     // HACK compensate for visit()/renderDisplayObject() transform
-    var t = this.root._currentTransform;
     var inverse;
     if (t) {
-      inverse = new flash.geom.Matrix(t.a, t.b, t.c, t.d, t.tx/20, t.ty/20);
+      inverse = new flash.geom.Matrix(t.a, t.b, t.c, t.d, t.tx / 20, t.ty / 20);
       inverse.invert();
       this.ctx.save();
       this.ctx.transform(inverse.a, inverse.b, inverse.c, inverse.d,
                          inverse.tx, inverse.ty);
     }
 
-    this.visit(this.root, isContainer, visitContainer,
-               new RenderingContext(this.refreshStage, this.invalidPath));
+    this.visit(root, visitContainer, new RenderingContext(this.refreshStage, this.invalidPath));
 
     if (t) {
       this.ctx.restore();
+    }
+    if (matrix) {
+      root._currentTransform = currentTransform;
+      root._invalidateTransform();
     }
   },
   childrenStart: function(parent) {
@@ -200,8 +211,11 @@ RenderVisitor.prototype = {
     if (this.clipDepth) {
       // removing existing clippings
       while (this.clipDepth.length > 0) {
-        this.clipDepth.pop();
-        this.ctx.restore();
+        var clipDepthInfo = this.clipDepth.pop();
+        // blend mask/maskee canvases and draw result into original
+        this.clipEnd(clipDepthInfo);
+        // restore original context
+        this.ctx = clipDepthInfo.ctx;
       }
       this.clipDepth = null;
     }
@@ -217,36 +231,54 @@ RenderVisitor.prototype = {
       this.invalidPath = null;
     }
   },
-  visit: function (child, isContainer, visitContainer, context) {
+  visit: function (child, visitContainer, context) {
     var ctx = this.ctx;
 
     var parentHasClippingMask = context.isClippingMask;
     var parentColorTransform = context.colorTransform;
 
-    var clippingMask = parentHasClippingMask === true;
+    var clippingMask = (parentHasClippingMask === true);
+
     if (child._cxform) {
       context.colorTransform = parentColorTransform.applyCXForm(child._cxform);
     }
 
     if (!clippingMask) {
-      // removing clipping if the required character depth is achived
+      // remove clipping if the required character depth is achieved
       while (this.clipDepth && this.clipDepth.length > 0 &&
-          child._depth > this.clipDepth[0]) {
-        this.clipDepth.shift();
-        ctx.restore();
+          child._depth > this.clipDepth[0].clipDepth)
+      {
+        var clipDepthInfo = this.clipDepth.shift();
+        // blend mask/maskee canvases and draw result into original
+        this.clipEnd(clipDepthInfo);
+        // restore original context
+        ctx = this.ctx = clipDepthInfo.ctx;
       }
       if (child._clipDepth) {
-        if (!this.clipDepth) {
-          this.clipDepth = [];
-        }
+        // child is a clipping mask
         context.isClippingMask = clippingMask = true;
-        // saving clipping until certain character depth
-        this.clipDepth.unshift(child._clipDepth);
-        ctx.save();
+        // create temporary mask/maskee canvases
+        var clipDepthInfo = this.clipStart(child);
+        // save clipping until certain character depth
+        if (!this.clipDepth) {
+          this.clipDepth = [clipDepthInfo];
+        } else {
+          this.clipDepth.unshift(clipDepthInfo);
+        }
+        // use mask canvas
+        ctx = this.ctx = clipDepthInfo.mask.ctx;
+      } else {
+        // child is not a clipping mask. check if it is masked by one
+        if (this.clipDepth && this.clipDepth.length > 0 &&
+            child._depth <= this.clipDepth[0].clipDepth)
+        {
+          // use maskee canvas
+          ctx = this.ctx = this.clipDepth[0].maskee.ctx;
+        }
       }
     }
 
-    if (clippingMask && isContainer) {
+    if (clippingMask && child._isContainer) {
       ctx.save();
       renderDisplayObject(child, ctx, context);
       for (var i = 0, n = child._children.length; i < n; i++) {
@@ -255,13 +287,11 @@ RenderVisitor.prototype = {
           continue;
         }
         if (this.ignoreVisibleAttribute || (child1._visible && !child1._maskedObject)) {
-          var isContainer = flash.display.DisplayObjectContainer.class.isInstanceOf(child1) ||
-                            flash.display.SimpleButton.class.isInstanceOf(child1);
-          this.visit(child1, isContainer, visitContainer, context);
+          this.visit(child1, visitContainer, context);
         }
       }
       ctx.restore();
-      ctx.clip();
+      ctx.fill();
       context.isClippingMask = parentHasClippingMask;
       context.colorTransform = parentColorTransform;
       return;
@@ -272,45 +302,27 @@ RenderVisitor.prototype = {
     ctx.globalCompositeOperation = getBlendModeName(child._blendMode);
 
     if (child._mask) {
-      var m = child._parent._getConcatenatedTransform(true);
-      // TODO create canvas small enough to fit the object and
-      // TODO cache the results when cacheAsBitmap is set
-      var tempCanvas, tempCtx, maskCanvas, maskCtx;
-      maskCanvas = CanvasCache.getCanvas(ctx.canvas);
-      maskCtx = maskCanvas.ctx;
-      maskCtx.setTransform(m.a, m.b, m.c, m.d, m.tx, m.ty);
-      var isMaskContainer = flash.display.DisplayObjectContainer.class.isInstanceOf(child._mask) ||
-                            flash.display.SimpleButton.class.isInstanceOf(child._mask);
-      this.ctx = maskCtx;
-      this.visit(child._mask, isMaskContainer, visitContainer, new RenderingContext(this.refreshStage));
+      var clipInfo = this.clipStart(child);
+      var mask = clipInfo.mask;
+      var maskee = clipInfo.maskee;
+
+      this.ctx = mask.ctx;
+      this.visit(child._mask, visitContainer, new RenderingContext(this.refreshStage));
       this.ctx = ctx;
 
-      tempCanvas = CanvasCache.getCanvas(ctx.canvas);
-      tempCtx = tempCanvas.ctx;
-      tempCtx.setTransform(m.a, m.b, m.c, m.d, m.tx, m.ty);
-      renderDisplayObject(child, tempCtx, context);
+      renderDisplayObject(child, maskee.ctx, context);
 
-      if (isContainer) {
-        this.ctx = tempCtx;
+      if (child._isContainer) {
+        this.ctx = maskee.ctx;
         visitContainer(child, this, context);
         this.ctx = ctx;
       }
 
-      tempCtx.globalCompositeOperation = 'destination-in';
-      tempCtx.setTransform(1, 0, 0, 1, 0, 0);
-      tempCtx.drawImage(maskCanvas.canvas, 0, 0);
-
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(tempCanvas.canvas, 0, 0);
-      ctx.restore();
-
-      CanvasCache.releaseCanvas(tempCanvas);
-      CanvasCache.releaseCanvas(maskCanvas);
+      this.clipEnd(clipInfo);
     } else {
       renderDisplayObject(child, ctx, context);
 
-      if (isContainer) {
+      if (child._isContainer) {
         visitContainer(child, this, context);
       }
     }
@@ -318,10 +330,51 @@ RenderVisitor.prototype = {
     ctx.restore();
 
     if (clippingMask) {
-      ctx.clip();
+      ctx.fill();
     }
     context.isClippingMask = parentHasClippingMask;
     context.colorTransform = parentColorTransform;
+  },
+
+  clipStart: function(child) {
+    var m = child._parent._getConcatenatedTransform(true);
+    var tx = m.tx / 20;
+    var ty = m.ty / 20;
+
+    // TODO create canvas small enough to fit the object and
+    // TODO cache the results when cacheAsBitmap is set
+
+    var mask = CanvasCache.getCanvas(this.ctx.canvas);
+    mask.ctx.setTransform(m.a, m.b, m.c, m.d, tx, ty);
+
+    var maskee = CanvasCache.getCanvas(this.ctx.canvas);
+    maskee.ctx.setTransform(m.a, m.b, m.c, m.d, tx, ty);
+
+    var clipInfo = {
+      ctx: this.ctx,
+      mask: mask,
+      maskee: maskee,
+      clipDepth: child._clipDepth
+    };
+
+    return clipInfo;
+  },
+  clipEnd: function(clipInfo) {
+    var ctx = clipInfo.ctx;
+    var mask = clipInfo.mask;
+    var maskee = clipInfo.maskee;
+
+    maskee.ctx.globalCompositeOperation = 'destination-in';
+    maskee.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    maskee.ctx.drawImage(mask.canvas, 0, 0);
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(maskee.canvas, 0, 0);
+    ctx.restore();
+
+    CanvasCache.releaseCanvas(mask);
+    CanvasCache.releaseCanvas(maskee);
   }
 };
 
@@ -364,7 +417,7 @@ RenderingColorTransform.prototype = {
     } else if (typeof style === 'number') {
       style = this.convertNumericColor(style);
     } else if (typeof style === 'function') {
-      style = style.defaultGradient;
+      style = style.defaultFillStyle;
     }
     ctx.fillStyle = style;
   },
@@ -374,7 +427,7 @@ RenderingColorTransform.prototype = {
     } else if (typeof style === 'number') {
       style = this.convertNumericColor(style);
     } else if (typeof style === 'function') {
-      style = style.defaultGradient;
+      style = style.defaultFillStyle;
     }
     ctx.strokeStyle = style;
   },
@@ -421,6 +474,9 @@ RenderingColorTransform.prototype = {
     var b = Math.min(255, Math.max(0, m[3] * t[2] + t[6])) | 0;
     var a = Math.min(1, Math.max(0, m[4] * t[3] + (t[7] / 256)));
     return "rgba(" + r + ',' + g + ',' + b + ',' + a + ')';
+  },
+  getTransformFingerprint: function () {
+    return this.transform.join('|');
   }
 };
 
@@ -606,8 +662,8 @@ function renderStage(stage, ctx, events) {
     var m = stage._concatenatedTransform;
     m.a = scaleX;
     m.d = scaleY;
-    m.tx = offsetX;
-    m.ty = offsetY;
+    m.tx = offsetX * 20;
+    m.ty = offsetY * 20;
   }
 
   updateRenderTransform();
@@ -710,6 +766,8 @@ function renderStage(stage, ctx, events) {
     if (stage._mouseMoved) {
       stage._mouseMoved = false;
       mouseMoved = stage._mouseOver;
+    } else {
+      stage._handleMouseButtons();
     }
 
     if (renderFrame || refreshStage || mouseMoved) {

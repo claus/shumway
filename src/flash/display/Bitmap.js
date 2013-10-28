@@ -39,6 +39,8 @@ var BitmapDefinition = (function () {
       this._bbox = { xMin: 0, yMin: 0, xMax: 0, yMax: 0 };
     }
     this._invalidate();
+    this._invalidateBounds();
+    this._invalidateTransform();
   }
 
   return {
@@ -56,7 +58,7 @@ var BitmapDefinition = (function () {
             Math.abs(Math.abs(transform.d) - 1) <= EPSILON &&
             Math.abs(transform.b) <= EPSILON && Math.abs(transform.c) <= EPSILON) {
           ctx.setTransform(transform.a < 0 ? -1 : 1, 0, 0, transform.d < 0 ? -1 : 1,
-                           transform.e|0, transform.f|0);
+                           (transform.tx/20)|0, (transform.ty/20)|0);
         }
         // TODO this._pixelSnapping === 'always'; does it even make sense in other cases?
       }
@@ -88,7 +90,7 @@ var BitmapDefinition = (function () {
             if (!bitmapData && this.symbol) {
               var symbol = this.symbol;
               bitmapData = new flash.display.BitmapData(symbol.width,
-                                                        symbol.height);
+                                                        symbol.height, true, 0);
               bitmapData._ctx.imageSmoothingEnabled = this._smoothing;
               bitmapData._ctx.mozImageSmoothingEnabled = this._smoothing;
               bitmapData._ctx.drawImage(symbol.img, 0, 0);

@@ -117,8 +117,8 @@ function applySegmentToStyles(segment, styles, linePaths, fillPaths, isMorph)
  * See http://blogs.msdn.com/b/mswanson/archive/2006/02/27/539749.aspx and
  * http://wahlers.com.br/claus/blog/hacking-swf-1-shapes-in-flash/ for details.
  */
-function convertRecordsToStyledPaths(records, fillPaths, linePaths,
-                                     dictionary, dependencies, recordsMorph)
+function convertRecordsToStyledPaths(records, fillPaths, linePaths, dictionary,
+                                     dependencies, recordsMorph, transferables)
 {
   var isMorph = recordsMorph !== null;
   var styles = {fill0: 0, fill1: 0, line: 0};
@@ -181,7 +181,8 @@ function convertRecordsToStyledPaths(records, fillPaths, linePaths,
       if (record.move) {
         x = record.moveX|0;
         y = record.moveY|0;
-        // When morphed, StyleChangeRecords/MoveTo might not have a corresponding record in the start or end shape --
+        // When morphed, StyleChangeRecords/MoveTo might not have a
+        // corresponding record in the start or end shape --
         // processing morphRecord below before converting type 1 records.
       }
 
@@ -214,7 +215,17 @@ function convertRecordsToStyledPaths(records, fillPaths, linePaths,
       assert(record.type === 1);
       assert(segment);
       if (isMorph) {
-        assert(morphRecord.type === 1);
+        // An invalid SWF might contain a move in the EndEdges list where the
+        // StartEdges list contains an edge. The Flash Player seems to skip it,
+        // so we do, too.
+        while (morphRecord && morphRecord.type === 0) {
+          morphRecord = recordsMorph[j++];
+        }
+        // The EndEdges list might be shorter than the StartEdges list. Reuse
+        // start edges as end edges in that case.
+        if (!morphRecord) {
+          morphRecord = record;
+        }
       }
 
       if (record.isStraight && (!isMorph || morphRecord.isStraight)) {
@@ -278,13 +289,14 @@ function convertRecordsToStyledPaths(records, fillPaths, linePaths,
       removeCount++;
       continue;
     }
-    allFillPaths[i - removeCount] = segmentedPathToShapePath(path, isMorph);
+    allFillPaths[i - removeCount] = segmentedPathToShapePath(path, isMorph,
+                                                             transferables);
   }
   allFillPaths.length -= removeCount;
   return allFillPaths;
 }
 
-function segmentedPathToShapePath(path, isMorph) {
+function segmentedPathToShapePath(path, isMorph, transferables) {
   var start = path.head();
   var end = start;
 
@@ -354,7 +366,7 @@ function segmentedPathToShapePath(path, isMorph) {
   }
 
   var shape = new ShapePath(path.fillStyle, path.lineStyle, totalCommandsLength,
-                            totalDataLength, isMorph);
+                            totalDataLength, isMorph, transferables);
   var allCommands = shape.commands;
   var allData = shape.data;
   var allMorphData = shape.morphData;
@@ -365,7 +377,6 @@ function segmentedPathToShapePath(path, isMorph) {
 
   current = finalRoot;
   while (current) {
-    var offset = 0;
     var commands = current.commands;
     var data = current.data;
     var morphData = current.morphData;
@@ -373,11 +384,9 @@ function segmentedPathToShapePath(path, isMorph) {
     // If the segment's first moveTo goes to the current coordinates,
     // we have to skip it. Removing those in the previous loop would be too
     // costly, and we might share the arrays with another style's path.
-    if (data[0] === allData[dataIndex - 2] &&
-        data[1] === allData[dataIndex - 1])
-    {
-      offset = 1;
-    }
+    var offset = +(data[0] === allData[dataIndex - 2] &&
+                   data[1] === allData[dataIndex - 1]);
+
     for (var i = offset; i < commands.length; i++, commandsIndex++) {
       allCommands[commandsIndex] = commands[i];
     }
@@ -476,13 +485,15 @@ function createPathsList(styles, isLineStyle, dictionary, dependencies) {
 }
 function defineShape(tag, dictionary) {
   var dependencies = [];
+  var transferables = [];
   var fillPaths = createPathsList(tag.fillStyles, false,
                                   dictionary, dependencies);
   var linePaths = createPathsList(tag.lineStyles, true,
                                   dictionary, dependencies);
   var paths = convertRecordsToStyledPaths(tag.records, fillPaths, linePaths,
                                           dictionary, dependencies,
-                                          tag.recordsMorph || null);
+                                          tag.recordsMorph || null,
+                                          transferables);
 
   if (tag.bboxMorph) {
     var mbox = tag.bboxMorph;
@@ -503,8 +514,17 @@ function defineShape(tag, dictionary) {
     bboxMorph: tag.bboxMorph,
     isMorph: tag.isMorph,
     paths: paths,
-    require: dependencies.length ? dependencies : null
+    require: dependencies.length ? dependencies : null,
+    transferables: transferables
   };
+}
+
+function logShape(paths, bbox) {
+  var output = '{"bounds":' + JSON.stringify(bbox) + ',"paths":[' +
+               paths.map(function(path) {
+                 return path.serialize();
+               }).join() + ']}';
+  console.log(output);
 }
 
 function SegmentedPath(fillStyle, lineStyle) {
@@ -566,7 +586,8 @@ var SHAPE_CUBIC_CURVE_TO = 6;
 var SHAPE_CIRCLE         = 7;
 var SHAPE_ELLIPSE        = 8;
 
-function ShapePath(fillStyle, lineStyle, commandsCount, dataLength, isMorph)
+function ShapePath(fillStyle, lineStyle, commandsCount, dataLength, isMorph,
+                   transferables)
 {
   this.fillStyle = fillStyle;
   this.lineStyle = lineStyle;
@@ -585,8 +606,24 @@ function ShapePath(fillStyle, lineStyle, commandsCount, dataLength, isMorph)
   this.bounds = null;
   this.strokeBounds = null;
 
-  this.isMorph = isMorph;
+  this.isMorph = !!isMorph;
   this.fullyInitialized = false;
+  // SpiderMonkey bug 841904 causes typed arrays to lose their buffers during
+  // worker#postMessage under some conditions. To work around this while still
+  // being able to move buffers instead of copying them, we have to store the
+  // buffers themselves, too, and restore the typed arrays after postMessage.
+  if (inWorker) {
+    assert(transferables);
+    this.buffers = [this.commands.buffer, this.data.buffer];
+    transferables.push(this.commands.buffer, this.data.buffer);
+    if (isMorph) {
+      this.buffers.push(this.morphData.buffer);
+      transferables.push(this.morphData.buffer);
+    }
+  }
+  else {
+    this.buffers = null;
+  }
 }
 
 ShapePath.prototype = {
@@ -640,8 +677,8 @@ ShapePath.prototype = {
     var formOpen = false;
     var formOpenX = 0;
     var formOpenY = 0;
-    for (var j = 0, k = 0; j < commands.length; j++) {
-      if (!this.isMorph) {
+    if (!this.isMorph) {
+      for (var j = 0, k = 0; j < commands.length; j++) {
         switch (commands[j]) {
           case SHAPE_MOVE_TO:
             formOpen = true;
@@ -710,10 +747,16 @@ ShapePath.prototype = {
             }
             break;
           default:
+            // Sometimes, the very last command isn't properly set. Ignore it.
+            if (commands[j] === 0 && j === commands.length -1) {
+              break;
+            }
             console.warn("Unknown drawing command encountered: " +
                          commands[j]);
         }
-      } else {
+      }
+    } else {
+      for (var j = 0, k = 0; j < commands.length; j++) {
         switch (commands[j]) {
           case SHAPE_MOVE_TO:
             ctx.moveTo(morph(data[k]/20, morphData[k++]/20, ratio),
@@ -743,6 +786,8 @@ ShapePath.prototype = {
       var fillStyle = this.fillStyle;
       if (fillStyle) {
         colorTransform.setFillStyle(ctx, fillStyle.style);
+        ctx.imageSmoothingEnabled = ctx.mozImageSmoothingEnabled =
+                                    fillStyle.smooth;
         var m = fillStyle.transform;
         ctx.save();
         colorTransform.setAlpha(ctx);
@@ -1294,7 +1339,31 @@ ShapePath.prototype = {
       this.strokeBounds = bounds;
     }
     return bounds;
+  },
+  serialize: function() {
+    var output = '{';
+    if (this.fillStyle) {
+      output += '"fill":' + JSON.stringify(this.fillStyle) + ',';
+    }
+    if (this.lineStyle) {
+      output += '"stroke":' + JSON.stringify(this.lineStyle) + ',';
+    }
+
+    output += '"commands":[' + Array.apply([], this.commands).join() + '],';
+    output += '"data":[' + Array.apply([], this.data).join() + ']';
+
+    return output + '}';
   }
+};
+
+ShapePath.fromPlainObject = function(obj) {
+  var path = new ShapePath(obj.fill || null, obj.stroke || null);
+  path.commands = new Uint8Array(obj.commands);
+  path.data = new Int32Array(obj.data);
+  if (!inWorker) {
+    finishShapePath(path);
+  }
+  return path;
 };
 
 function distanceSq(x1, y1, x2, y2) {
@@ -1567,30 +1636,32 @@ function morph(start, end, ratio) {
 
 /**
  * For shapes parsed in a worker thread, we have to finish their
- * initialization after receiving the data in the main thread.
+ * paths after receiving the data in the main thread.
  *
  * This entails creating proper instances for all the contained data types.
  */
-function finishShapePaths(paths, dictionary) {
-  assert(window);
+function finishShapePath(path, dictionary) {
+  assert(!inWorker);
 
-  for (var i = 0; i < paths.length; i++) {
-    var path = paths[i];
-    if (path.fullyInitialized) {
-      continue;
-    }
-    if (!(path instanceof ShapePath)) {
-      var untypedPath = path;
-      path = paths[i] = new ShapePath(path.fillStyle, path.lineStyle, 0, 0,
-                                      path.isMorph);
-      path.commands = untypedPath.commands;
-      path.data = untypedPath.data;
-      path.morphData = untypedPath.morphData;
-    }
-    path.fillStyle && initStyle(path.fillStyle, dictionary);
-    path.lineStyle && initStyle(path.lineStyle, dictionary);
-    path.fullyInitialized = true;
+  if (path.fullyInitialized) {
+    return path;
   }
+  if (!(path instanceof ShapePath)) {
+    var untypedPath = path;
+    path = new ShapePath(path.fillStyle, path.lineStyle, 0, 0, path.isMorph);
+    // See the comment in the ShapePath ctor for why we're recreating the
+    // typed arrays here.
+    path.commands = new Uint8Array(untypedPath.buffers[0]);
+    path.data = new Int32Array(untypedPath.buffers[1]);
+    if (untypedPath.isMorph) {
+      path.morphData = new Int32Array(untypedPath.buffers[2]);
+    }
+    path.buffers = null;
+  }
+  path.fillStyle && initStyle(path.fillStyle, dictionary);
+  path.lineStyle && initStyle(path.lineStyle, dictionary);
+  path.fullyInitialized = true;
+  return path;
 }
 
 var inWorker = (typeof window) === 'undefined';
@@ -1618,7 +1689,7 @@ function buildLinearGradientFactory(colorStops) {
     }
     return gradient;
   };
-  fn.defaultGradient = defaultGradient;
+  fn.defaultFillStyle = defaultGradient;
 
   return fn;
 }
@@ -1643,7 +1714,38 @@ function buildRadialGradientFactory(focalPoint, colorStops) {
     }
     return gradient;
   };
-  fn.defaultGradient = defaultGradient;
+  fn.defaultFillStyle = defaultGradient;
+
+  return fn;
+}
+
+/**
+ * @param {Object} img
+ * @param {String} repeat
+ */
+function buildBitmapPatternFactory(img, repeat) {
+  var defaultPattern = factoryCtx.createPattern(img, repeat);
+
+  var cachedTransform, cachedTransformKey;
+  var fn = function createBitmapPattern(ctx, colorTransform) {
+    if (!colorTransform.mode) {
+      return defaultPattern;
+    }
+    var key = colorTransform.getTransformFingerprint();
+    if (key === cachedTransformKey) {
+      return cachedTransform;
+    }
+    var canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    var ctx = canvas.getContext('2d');
+    colorTransform.setAlpha(ctx, true);
+    ctx.drawImage(img, 0, 0);
+    cachedTransform = ctx.createPattern(canvas, repeat);
+    cachedTransformKey = key;
+    return cachedTransform;
+  };
+  fn.defaultFillStyle = defaultPattern;
 
   return fn;
 }
@@ -1682,8 +1784,8 @@ function initStyle(style, dictionary) {
       var bitmap = dictionary[style.bitmapId];
       var repeat = (style.type === GRAPHICS_FILL_REPEATING_BITMAP) ||
                    (style.type === GRAPHICS_FILL_NONSMOOTHED_REPEATING_BITMAP);
-      style.style = factoryCtx.createPattern(bitmap.value.props.img,
-                                             repeat ? "repeat" : "no-repeat");
+      style.style = buildBitmapPatternFactory(bitmap.value.props.img,
+                                              repeat ? "repeat" : "no-repeat");
       // HACK: For WebGL backend.
       style.style.image = bitmap.value.props.img;
       break;

@@ -395,9 +395,19 @@ var natives = (function () {
         concat: Sp.concat,
         localeCompare: Sp.localeCompare,
         match: function (re) {
-          if (re === void 0) {
+          if (re === (void 0) || re === null) {
             return null;
           } else {
+            if (re instanceof RegExp && re.global) {
+              var matches = [], m;
+              while ((m = re.exec(this))) {
+                matches.push(m[0]);
+              }
+              return matches;
+            }
+            if (!(re instanceof RegExp) && !(typeof re === 'string')) {
+              re = String(re);
+            }
             return this.match(re);
           }
         },
@@ -1115,6 +1125,10 @@ var natives = (function () {
     var defaultObjectEncoding = 3;
 
     function ByteArray(bytes) {
+      if (bytes instanceof ByteArray) {
+        // HACK coercion to ByteArray (constructor is called as function from byte code)
+        return bytes;
+      }
       var initData = bytes || (this.symbol && this.symbol.data);
       if (initData) {
         this.a = new ArrayBuffer(initData.length);
@@ -1623,7 +1637,7 @@ var natives = (function () {
     }),
 
     getDefinitionByName: constant(function (name) {
-      var simpleName = name.replace("::", ".");
+      var simpleName = String(name).replace("::", ".");
       return AVM2.currentDomain().getClass(simpleName);
     }),
 

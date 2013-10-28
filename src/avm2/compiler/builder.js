@@ -226,10 +226,9 @@ var createName = function createName(namespaces, name) {
     return node;
   }
 
-  function warn(message) {
-    console.warn(message);
+  function info(message) {
+    console.info(message);
   }
-
   function unary(operator, argument) {
     var node = new Unary(operator, argument);
     if (peepholeOptimizer) {
@@ -581,7 +580,7 @@ var createName = function createName(namespaces, name) {
               if (ti.object instanceof Global && !ti.object.isExecuting()) {
                 // If we find the property in a global whose script hasn't been executed yet
                 // we have to emit the slow path so it gets executed.
-                warn("Can't optimize findProperty " + multiname + ", global object is not yet executed or executing.");
+                info("Can't optimize findProperty " + multiname + ", global object is not yet executed or executing.");
                 return slowPath;
               }
               return constant(ti.object);
@@ -589,7 +588,7 @@ var createName = function createName(namespaces, name) {
               return getScopeObject(topScope(ti.scopeDepth));
             }
           }
-          warn("Can't optimize findProperty " + multiname);
+          info("Can't optimize findProperty " + multiname);
           return slowPath;
         }
 
@@ -707,7 +706,7 @@ var createName = function createName(namespaces, name) {
               return store(new IR.ASGetProperty(region, state.store, object, multiname, IR.Flags.INDEXED | (getOpenMethod ? IR.Flagas.IS_METHOD : 0)));
             }
           }
-          warn("Can't optimize getProperty " + multiname);
+          info("Can't optimize getProperty " + multiname);
           var qn = resolveMultinameGlobally(multiname);
           if (qn) {
             return store(new IR.ASGetProperty(region, state.store, object, constant(Multiname.getQualifiedName(qn)), IR.Flags.RESOLVED | (getOpenMethod ? IR.Flagas.IS_METHOD : 0)));
@@ -731,7 +730,7 @@ var createName = function createName(namespaces, name) {
               return store(new IR.ASSetProperty(region, state.store, object, multiname, value, IR.Flags.INDEXED));
             }
           }
-          warn("Can't optimize setProperty " + multiname);
+          info("Can't optimize setProperty " + multiname);
           var qn = resolveMultinameGlobally(multiname);
           if (qn) {
             // TODO: return store(new IR.SetProperty(region, state.store, object, constant(Multiname.getQualifiedName(qn)), value));
@@ -755,6 +754,7 @@ var createName = function createName(namespaces, name) {
               return store(new IR.GetProperty(region, state.store, object, constant(slotQn)));
             }
           }
+          info("Can't optimize getSlot " + index);
           return store(new IR.ASGetSlot(null, state.store, object, index));
         }
 
@@ -767,6 +767,7 @@ var createName = function createName(namespaces, name) {
               return;
             }
           }
+          info("Can't optimize setSlot " + index);
           store(new IR.ASSetSlot(region, state.store, object, index, value));
         }
 
@@ -936,7 +937,7 @@ var createName = function createName(namespaces, name) {
               scope.pop();
               break;
             case 0x64: // OP_getglobalscope
-              push(new IR.ASGlobal(null, topScope()));
+              push(new IR.ASGlobal(null, savedScope()));
               break;
             case 0x65: // OP_getscopeobject
               push(getScopeObject(state.scope[bc.index]));
@@ -1113,10 +1114,14 @@ var createName = function createName(namespaces, name) {
             case 0x23: // OP_nextvalue
               index = pop();
               object = pop();
-              push(call(globalProperty(op === OP_nextname ? "nextName" : "nextValue"), null, [object, index]));
+              push(new IR.CallProperty(
+                region, state.store, object,
+                constant(op === OP_nextname ? "asNextName" : "asNextValue"),
+                [index], IR.Flags.PRISTINE)
+              );
               break;
             case 0x32: // OP_hasnext2
-              var temp = call(globalProperty("hasNext2"), null, [local[bc.object], local[bc.index]]);
+              var temp = call(globalProperty("asHasNext2"), null, [local[bc.object], local[bc.index]]);
               local[bc.object] = getJSProperty(temp, "object");
               push(local[bc.index] = getJSProperty(temp, "index"));
               break;

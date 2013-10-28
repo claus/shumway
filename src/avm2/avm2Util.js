@@ -29,6 +29,13 @@ if (!inBrowser) {
   };
 }
 
+if (!this.performance) {
+  this.performance = {};
+}
+if (!this.performance.now) {
+  this.performance.now = Date.now;
+}
+
 function backtrace() {
   try {
     throw new Error();
@@ -241,12 +248,12 @@ function isPowerOfTwo(x) {
 }
 
 function time(fn, count) {
-  var start = new Date();
+  var start = performance.now();
   for (var i = 0; i < count; i++) {
     fn();
   }
-  var time = (new Date() - start) / count;
-  console.info("Took: " + time + "ms.");
+  var time = (performance.now() - start) / count;
+  console.info("Took: " + time.toFixed(2) + "ms.");
   return time;
 }
 
@@ -297,18 +304,21 @@ function isNumeric(x) {
   if (typeof x === "number") {
     return x === (x | 0);
   }
-  if (typeof x === "string" && x.length) {
-    if (x === "0") {
-      return true;
-    }
-    if ((x[0] >= '1') && (x[0] <= '9')) {
-      for (var i = 1; i < x.length; i++) {
-        if (!((x[i] >= '1') && (x[i] <= '9'))) {
-          return false;
-        }
+  if (typeof x !== "string" || x.length === 0) {
+    return false;
+  }
+  if (x === "0") {
+    return true;
+  }
+  var c = x.charCodeAt(0);
+  if ((c >= 49) && (c <= 57)) {
+    for (var i = 1, j = x.length; i < j; i++) {
+      c = x.charCodeAt(i);
+      if (!((c >= 48) && (c <= 57))) {
+        return false;
       }
-      return true;
     }
+    return true;
   }
   return false;
 }
@@ -629,6 +639,9 @@ function bitCount(i) {
 function escapeString(str) {
   if (str !== undefined) {
     str = str.replace(/[^\w$]/gi,"$"); /* No dots, colons, dashes and /s */
+    if (/^\d/.test(str)) { /* No digits at the beginning */
+      str = '$' + str;
+    }
   }
   return str;
 }
