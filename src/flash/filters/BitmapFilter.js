@@ -42,7 +42,7 @@ var BitmapFilterDefinition = (function () {
 
     },
     _updateBlurBounds: function (bounds, isBlurFilter) {
-      var stepWidth = blurFilterStepWidths[this._quality - 1] - eps;
+      var stepWidth = blurFilterStepWidths[this._quality - 1];
       var bx = this._blurX;
       var by = this._blurY;
       if (isBlurFilter) {
@@ -50,8 +50,8 @@ var BitmapFilterDefinition = (function () {
         bx -= stepWidth4;
         by -= stepWidth4;
       }
-      var bh = Math.ceil((bx < 1 ? 1 : bx) / stepWidth);
-      var bv = Math.ceil((by < 1 ? 1 : by) / stepWidth);
+      var bh = Math.ceil((bx < 1 ? 1 : bx) / (stepWidth - EPS));
+      var bv = Math.ceil((by < 1 ? 1 : by) / (stepWidth - EPS));
       bounds.xmin -= bh;
       bounds.xmax += bh;
       bounds.ymin -= bv;
