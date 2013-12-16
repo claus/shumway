@@ -18,6 +18,11 @@
 
 var BitmapFilterDefinition = (function () {
   var EPS = 0.000000001;
+  // Step widths for blur based filters, for quality values 1..15:
+  // If we plot the border width added by generateFilterRect for each
+  // blurX (or blurY) value, the step width is the amount of blurX
+  // that adds one pixel to the border width. I.e. for quality = 1,
+  // the border width increments at blurX = 2, 4, 6, ...
   var blurFilterStepWidths = [
     2,
     1 / 1.05,
@@ -42,14 +47,23 @@ var BitmapFilterDefinition = (function () {
 
     },
     _updateBlurBounds: function (bounds, isBlurFilter) {
+      // Approximation of BitmapData.generateFilterRect()
       var stepWidth = blurFilterStepWidths[this._quality - 1];
       var bx = this._blurX;
       var by = this._blurY;
       if (isBlurFilter) {
+        // BlurFilter behaves slightly different from other blur based filters:
+        // Given ascending blurX/blurY values, generateFilterRect with BlurFilter
+        // expands the source rect later than with i.e. GlowFilter. The difference
+        // appears to be stepWidth / 4 for all quality values.
         var stepWidth4 = stepWidth / 4;
         bx -= stepWidth4;
         by -= stepWidth4;
       }
+      // Calculate horizontal and vertical borders:
+      // blurX/blurY values <= 1 are always rounded up to 1,
+      // which means that generateFilterRect always expands the source rect,
+      // even when blurX/blurY is 0.
       var bh = Math.ceil((bx < 1 ? 1 : bx) / (stepWidth - EPS));
       var bv = Math.ceil((by < 1 ? 1 : by) / (stepWidth - EPS));
       bounds.xmin -= bh;
