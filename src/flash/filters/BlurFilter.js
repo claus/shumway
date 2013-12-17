@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/* global clamp */
 
 var BlurFilterDefinition = (function () {
   return {
@@ -34,15 +35,15 @@ var BlurFilterDefinition = (function () {
         instance: {
           blurX: {
             get: function blurX() { return this._blurX; },
-            set: function blurX(value) { this._blurX = value; }
+            set: function blurX(value) { this._blurX = clamp(value, 0, 255); }
           },
           blurY: {
             get: function blurY() { return this._blurY; },
-            set: function blurY(value) { this._blurY = value; }
+            set: function blurY(value) { this._blurY = clamp(value, 0, 255); }
           },
           quality: {
             get: function quality() { return this._quality; },
-            set: function quality(value) { this._quality = value; }
+            set: function quality(value) { this._quality = clamp(value, 0, 15); }
           }
         }
       }

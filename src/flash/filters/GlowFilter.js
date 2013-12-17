@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/* global clamp */
 
 var GlowFilterDefinition = (function () {
   return {
@@ -32,21 +33,21 @@ var GlowFilterDefinition = (function () {
         static: {
         },
         instance: {
-          color: {
-            get: function color() { return this._color; },
-            set: function color(value) { this._color = value; }
-          },
           alpha: {
             get: function alpha() { return this._alpha; },
-            set: function alpha(value) { this._alpha = value; }
+            set: function alpha(value) { this._alpha = clamp(value, 0, 1); }
           },
           blurX: {
             get: function blurX() { return this._blurX; },
-            set: function blurX(value) { this._blurX = value; }
+            set: function blurX(value) { this._blurX = clamp(value, 0, 255); }
           },
           blurY: {
             get: function blurY() { return this._blurY; },
-            set: function blurY(value) { this._blurY = value; }
+            set: function blurY(value) { this._blurY = clamp(value, 0, 255); }
+          },
+          color: {
+            get: function color() { return this._color; },
+            set: function color(value) { this._color = value; }
           },
           inner: {
             get: function inner() { return this._inner; },
@@ -58,11 +59,11 @@ var GlowFilterDefinition = (function () {
           },
           quality: {
             get: function quality() { return this._quality; },
-            set: function quality(value) { this._quality = value; }
+            set: function quality(value) { this._quality = clamp(value, 0, 15); }
           },
           strength: {
             get: function strength() { return this._strength; },
-            set: function strength(value) { this._strength = value; }
+            set: function strength(value) { this._strength = clamp(value, 0, 255); }
           }
         }
       }
