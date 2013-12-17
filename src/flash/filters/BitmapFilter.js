@@ -71,8 +71,17 @@ var BitmapFilterDefinition = (function () {
       bounds.yMin -= bv;
       bounds.yMax += bv;
     },
+    _generateFilterBounds: function () {
+      return null;
+    }
     _updateFilterBounds: function (bounds) {
-
+      var b = this._generateFilterBounds();
+      if (b) {
+        bounds.xMin += b.xMin * 20;
+        bounds.xMax += b.xMax * 20;
+        bounds.yMin += b.yMin * 20;
+        bounds.yMax += b.yMax * 20;
+      }
     }
   };
 

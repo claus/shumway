@@ -23,8 +23,7 @@ var BevelFilterDefinition = (function () {
     initialize: function () {
 
     },
-    _updateFilterBounds: function (bounds) {
-
+    _generateFilterBounds: function () {
     }
   };
 

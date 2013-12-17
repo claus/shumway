@@ -22,9 +22,6 @@ var ConvolutionFilterDefinition = (function () {
 
     initialize: function () {
 
-    },
-    _updateFilterBounds: function (bounds) {
-
     }
   };
 

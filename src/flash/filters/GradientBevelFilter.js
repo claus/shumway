@@ -22,10 +22,7 @@ var GradientBevelFilterDefinition = (function () {
 
     initialize: function () {
 
-    },
-    _updateFilterBounds: function (bounds) {
-
-    },
+    }
   };
 
   def.__glue__ = { };

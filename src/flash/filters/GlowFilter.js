@@ -23,13 +23,10 @@ var GlowFilterDefinition = (function () {
     initialize: function () {
 
     },
-    _updateFilterBounds: function (bounds) {
-      var bx = this._blurX * this._quality * 20;
-      var by = this._blurY * this._quality * 20;
-      bounds.xMin -= bx;
-      bounds.xMax += bx;
-      bounds.yMin -= by;
-      bounds.yMax += by;
+    _generateFilterBounds: function () {
+      var bounds = { xMin: 0, yMin: 0, xMax: 0, yMax: 0 };
+      this._updateBlurBounds(bounds);
+      return bounds;
     },
     __glue__: {
       native: {

@@ -23,16 +23,23 @@ var DropShadowFilterDefinition = (function () {
     initialize: function () {
 
     },
-    _updateFilterBounds: function (bounds) {
-      var a = this._angle * Math.PI / 180;
-      var dy = (Math.sin(a) * this._distance);
-      var dx = (Math.cos(a) * this._distance);
-      var bx = this._blurX * this._quality * 20;
-      var by = this._blurY * this._quality * 20;
-      bounds.xMin -= bx - (dx > 0 ? 0 : dx);
-      bounds.xMax += bx + Math.abs(dx);
-      bounds.yMin -= by - (dy > 0 ? 0 : dy);
-      bounds.yMax += by + Math.abs(dy);
+    _generateFilterBounds: function () {
+      if (this._inner) {
+        return null;
+      } else {
+        var bounds = { xMin: 0, yMin: 0, xMax: 0, yMax: 0 };
+        this._updateBlurBounds(bounds);
+        if (this._distance !== 0) {
+          var a = this._angle * Math.PI / 180;
+          var dx = Math.cos(a) * this._distance;
+          var dy = Math.sin(a) * this._distance;
+          bounds.xMin -= (dx >= 0 ? 0 : Math.floor(dx));
+          bounds.xMax += Math.ceil(Math.abs(dx));
+          bounds.yMin -= (dy >= 0 ? 0 : Math.floor(dy));
+          bounds.yMax += Math.ceil(Math.abs(dy));
+        }
+        return bounds;
+      }
     },
     __glue__: {
       native: {

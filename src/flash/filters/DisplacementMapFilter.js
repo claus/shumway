@@ -22,9 +22,6 @@ var DisplacementMapFilterDefinition = (function () {
 
     initialize: function () {
 
-    },
-    _updateFilterBounds: function (bounds) {
-
     }
   };
 

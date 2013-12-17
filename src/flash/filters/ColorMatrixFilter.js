@@ -23,9 +23,6 @@ var ColorMatrixFilterDefinition = (function () {
     initialize: function () {
 
     },
-    _updateFilterBounds: function (bounds) {
-
-    },
     __glue__: {
       native: {
         instance: {
