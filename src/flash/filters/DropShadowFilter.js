@@ -44,21 +44,13 @@ var DropShadowFilterDefinition = (function () {
     __glue__: {
       native: {
         instance: {
-          distance: {
-            get: function distance() { return this._distance; },
-            set: function distance(value) { this._distance = value; }
+          alpha: {
+            get: function alpha() { return this._alpha; },
+            set: function alpha(value) { this._alpha = value; }
           },
           angle: {
             get: function angle() { return this._angle; },
             set: function angle(value) { this._angle = value; }
-          },
-          color: {
-            get: function color() { return this._color; },
-            set: function color(value) { this._color = value; }
-          },
-          alpha: {
-            get: function alpha() { return this._alpha; },
-            set: function alpha(value) { this._alpha = value; }
           },
           blurX: {
             get: function blurX() { return this._blurX; },
@@ -67,6 +59,14 @@ var DropShadowFilterDefinition = (function () {
           blurY: {
             get: function blurY() { return this._blurY; },
             set: function blurY(value) { this._blurY = value; }
+          },
+          color: {
+            get: function color() { return this._color; },
+            set: function color(value) { this._color = value; }
+          },
+          distance: {
+            get: function distance() { return this._distance; },
+            set: function distance(value) { this._distance = value; }
           },
           hideObject: {
             get: function hideObject() { return this._hideObject; },

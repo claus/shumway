@@ -17,17 +17,84 @@
  */
 
 var BevelFilterDefinition = (function () {
-  var def = {
+  return {
     __class__: 'flash.filters.BevelFilter',
-
     initialize: function () {
 
     },
     _generateFilterBounds: function () {
+      if (this.type === "inner") {
+        return null;
+      } else {
+        var bounds = { xMin: 0, yMin: 0, xMax: 0, yMax: 0 };
+        this._updateBlurBounds(bounds);
+        if (this._distance !== 0) {
+          var a = this._angle * Math.PI / 180;
+          var dx = Math.cos(a) * this._distance;
+          var dy = Math.sin(a) * this._distance;
+          bounds.xMin -= (dx >= 0 ? 0 : Math.floor(dx));
+          bounds.xMax += Math.ceil(Math.abs(dx));
+          bounds.yMin -= (dy >= 0 ? 0 : Math.floor(dy));
+          bounds.yMax += Math.ceil(Math.abs(dy));
+        }
+        return bounds;
+      }
+    },
+    __glue__: {
+      native: {
+        static: {
+        },
+        instance: {
+          angle: {
+            get: function angle() { return this._angle; },
+            set: function angle(value) { this._angle = value; }
+          },
+          blurX: {
+            get: function blurX() { return this._blurX; },
+            set: function blurX(value) { this._blurX = value; }
+          },
+          blurY: {
+            get: function blurY() { return this._blurY; },
+            set: function blurY(value) { this._blurY = value; }
+          },
+          distance: {
+            get: function distance() { return this._distance; },
+            set: function distance(value) { this._distance = value; }
+          },
+          highlightAlpha: {
+            get: function alpha() { return this._alpha; },
+            set: function alpha(value) { this._alpha = value; }
+          },
+          highlightColor: {
+            get: function color() { return this._color; },
+            set: function color(value) { this._color = value; }
+          },
+          knockout: {
+            get: function knockout() { return this._knockout; },
+            set: function knockout(value) { this._knockout = value; }
+          },
+          quality: {
+            get: function quality() { return this._quality; },
+            set: function quality(value) { this._quality = value; }
+          },
+          shadowAlpha: {
+            get: function alpha() { return this._alpha; },
+            set: function alpha(value) { this._alpha = value; }
+          },
+          shadowColor: {
+            get: function color() { return this._color; },
+            set: function color(value) { this._color = value; }
+          },
+          strength: {
+            get: function strength() { return this._strength; },
+            set: function strength(value) { this._strength = value; }
+          },
+          type: {
+            get: function inner() { return this._type; },
+            set: function inner(value) { this._type = value; }
+          }
+        }
+      }
     }
   };
-
-  def.__glue__ = { };
-
-  return def;
 }).call(this);
