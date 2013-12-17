@@ -66,10 +66,10 @@ var BitmapFilterDefinition = (function () {
       // even when blurX/blurY is 0.
       var bh = Math.ceil((bx < 1 ? 1 : bx) / (stepWidth - EPS));
       var bv = Math.ceil((by < 1 ? 1 : by) / (stepWidth - EPS));
-      bounds.xmin -= bh;
-      bounds.xmax += bh;
-      bounds.ymin -= bv;
-      bounds.ymax += bv;
+      bounds.xMin -= bh;
+      bounds.xMax += bh;
+      bounds.yMin -= bv;
+      bounds.yMax += bv;
     },
     _updateFilterBounds: function (bounds) {
 
