@@ -73,7 +73,7 @@ var BitmapFilterDefinition = (function () {
     },
     _generateFilterBounds: function () {
       return null;
-    }
+    },
     _updateFilterBounds: function (bounds) {
       var b = this._generateFilterBounds();
       if (b) {
