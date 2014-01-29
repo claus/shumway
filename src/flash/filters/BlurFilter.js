@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* global clamp */
+/* global clamp, Module, FILTERS */
 
 var BlurFilterDefinition = (function () {
   return {
@@ -28,10 +28,21 @@ var BlurFilterDefinition = (function () {
       this._updateBlurBounds(bounds, true);
       return bounds;
     },
+    _applyFilter: function (imageData, width, height) {
+      var pimg = Module._malloc(imageData.length);
+      Module.HEAPU8.set(imageData, pimg);
+      FILTERS.preMultiplyAlpha(pimg, width, height);
+      FILTERS.blur(pimg,
+                   width, height,
+                   Math.round((this._blurX - 1) / 2),
+                   Math.round((this._blurY - 1) / 2),
+                   this._quality, 0);
+      FILTERS.unpreMultiplyAlpha(pimg, width, height);
+      imageData.set(Module.HEAPU8.subarray(pimg, pimg + imageData.length));
+      Module._free(pimg);
+    },
     __glue__: {
       native: {
-        static: {
-        },
         instance: {
           blurX: {
             get: function blurX() { return this._blurX; },

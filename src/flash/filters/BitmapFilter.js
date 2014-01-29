@@ -82,6 +82,8 @@ var BitmapFilterDefinition = (function () {
         bounds.yMin += b.yMin * 20;
         bounds.yMax += b.yMax * 20;
       }
+    },
+    _applyFilter: function () {
     }
   };
 
